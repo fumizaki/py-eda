@@ -1,5 +1,6 @@
 import streamlit as st
 from services.eda.dataframe import EDADataFrame
+from services.eda.enum import ImputeMethod, DetectOutlierMethod, TreatOutlierMethod, ScalingMethod
 from services.eda.models.lightgbm.model import LightGBMModel
 
 from components.histogram import draw_histogram, get_histogram_instruction
@@ -12,30 +13,395 @@ from components.correlation_matrix import draw_correlation_matrix, cmap_options,
 from components.pairplot import draw_pairplot, diagnoal_kind_options, get_pairplot_instruction
 from components.barchart import draw_barchart
 
-st.title('PyEDA')
+
+
+def render_impute_handling(eda: EDADataFrame) -> None:
+    if len(eda.missing_columns) > 0:
+        with st.expander("欠損値補完", expanded=False):
+            impute_target = st.selectbox(
+                "補完対象のカラムを選択",
+                eda.missing_columns,
+                key='impute_target'
+            )
+
+            impute_option = st.selectbox(
+                "補完オプションを選択",
+                options=['静的補完', '動的補完'],
+                key='impute_option'
+            )
+
+            impute_value = None
+            impute_method = None
+            groupby_cols = None
+
+            if impute_option == '静的補完':
+                impute_value_str = st.text_input(
+                    "補完する値を入力",
+                    key='impute_textinput_value'
+                )
+                # 入力値を適切な型に変換を試みる
+                if impute_value_str:
+                    try:
+                        # まずintに変換を試みる
+                        impute_value = int(impute_value_str)
+                    except ValueError:
+                        try:
+                            # intでなければfloatに変換を試みる
+                            impute_value = float(impute_value_str)
+                        except ValueError:
+                            # floatでもなければ文字列として扱う
+                            impute_value = impute_value_str
+                    # Check if value is None after conversion (e.g. empty string was entered)
+                    if impute_value == "":
+                        impute_value = None
+
+            elif impute_option == '動的補完':
+                impute_method = st.selectbox(
+                    '補完方法を選択',
+                    options=[ImputeMethod.MEAN, ImputeMethod.MEDIAN, ImputeMethod.MODE, ImputeMethod.FFILL, ImputeMethod.BFILL]
+                )
+
+                if impute_method in [ImputeMethod.MEAN, ImputeMethod.MEDIAN, ImputeMethod.MODE]:
+                    available_groupby_cols = [col for col in eda.columns if col != impute_target]
+                    if available_groupby_cols:
+                        groupby_cols = st.multiselect(
+                            "グループ化(複数, 任意)",
+                            available_groupby_cols,
+                            key='impute_groupby'
+                        )
+                        if not groupby_cols:
+                            groupby_cols = None
+                    else:
+                        st.info("グループ化に使用できる他のカラムがありません。")
+
+
+            if st.button("実行", key='impute_button'):
+                if impute_method is None and impute_value is None:
+                    st.warning("補完方法を選択するか、補完する値を入力してください。")
+                else:
+                    try:
+                        # Call the imputation method
+                        eda.impute_missing_value(
+                            column=impute_target,
+                            value=impute_value if impute_method is None else None, # Only pass value if method is None
+                            method=impute_method,
+                            groupby=groupby_cols
+                        )
+                        st.success(f"カラム '{impute_target}' の欠損値補完が完了しました（方法: {impute_method.value if impute_method else '定数'}, groupby: {groupby_cols}）。")
+                    except ValueError as e:
+                        st.error(f"欠損値補完エラー: {e}")
+                    except Exception as e:
+                        st.error(f"予期しないエラーが発生しました: {e}")
+
+    else:
+        st.info("欠損値はありません")
+
+
+def render_outlier_handling(eda: EDADataFrame) -> None:
+
+    # Only show if there are numeric columns
+    if len(eda.numeric_columns) > 0:
+        with st.expander("外れ値処理", expanded=False):
+            # Column selection
+            outlier_target = st.selectbox(
+                "外れ値を処理するカラムを選択",
+                eda.numeric_columns,
+                key='outlier_target'
+            )
+
+            # Detection method selection
+            detection_method = st.selectbox(
+                "外れ値検出方法を選択",
+                [
+                    DetectOutlierMethod.IQR, 
+                    DetectOutlierMethod.ZSCORE, 
+                    DetectOutlierMethod.PERCENTILE
+                ],
+                format_func=lambda x: {
+                    DetectOutlierMethod.IQR: "IQR法",
+                    DetectOutlierMethod.ZSCORE: "Z-スコア法",
+                    DetectOutlierMethod.PERCENTILE: "パーセンタイル法"
+                }[x],
+                key='detection_method'
+            )
+
+            # Threshold input based on detection method
+            if detection_method == DetectOutlierMethod.IQR:
+                threshold = st.slider(
+                    "IQR閾値", 
+                    min_value=0.5, 
+                    max_value=3.0, 
+                    value=1.5, 
+                    step=0.1,
+                    help="IQRの何倍を外れ値とみなすか",
+                    key='iqr_threshold'
+                )
+            elif detection_method == DetectOutlierMethod.ZSCORE:
+                threshold = st.slider(
+                    "Z-スコア閾値", 
+                    min_value=1.0, 
+                    max_value=5.0, 
+                    value=3.0, 
+                    step=0.5,
+                    help="標準偏差の何倍を外れ値とみなすか",
+                    key='zscore_threshold'
+                )
+            else:  # PERCENTILE
+                col_lower, col_upper = st.columns(2)
+                with col_lower:
+                    lower_percentile = st.number_input(
+                        "下限パーセンタイル", 
+                        min_value=0.0, 
+                        max_value=49.9, 
+                        value=1.0,
+                        step=0.1,
+                        help="この値未満を外れ値とみなす",
+                        key='lower_percentile'
+                    )
+                with col_upper:
+                    upper_percentile = st.number_input(
+                        "上限パーセンタイル", 
+                        min_value=50.1, 
+                        max_value=100.0, 
+                        value=99.0,
+                        step=0.1,
+                        help="この値を超える値を外れ値とみなす",
+                        key='upper_percentile'
+                    )
+                threshold = (lower_percentile, upper_percentile)
+
+            # Treatment method selection
+            treatment_method = st.selectbox(
+                "外れ値の処理方法を選択",
+                [
+                    TreatOutlierMethod.REMOVE, 
+                    TreatOutlierMethod.CLIP, 
+                    TreatOutlierMethod.REPLACE
+                ],
+                format_func=lambda x: {
+                    TreatOutlierMethod.REMOVE: "削除",
+                    TreatOutlierMethod.CLIP: "境界値に丸める",
+                    TreatOutlierMethod.REPLACE: "指定値に置換"
+                }[x],
+                key='treatment_method'
+            )
+
+            # Replace value input (only for REPLACE method)
+            replace_value = None
+            if treatment_method == TreatOutlierMethod.REPLACE:
+                replace_value_str = st.text_input(
+                    "置換する値を入力",
+                    key='replace_value'
+                )
+                # 入力値を適切な型に変換を試みる
+                if replace_value_str:
+                    try:
+                        # まずintに変換を試みる
+                        replace_value = int(replace_value_str)
+                    except ValueError:
+                        try:
+                            # intでなければfloatに変換を試みる
+                            replace_value = float(replace_value_str)
+                        except ValueError:
+                            # floatでもなければ文字列として扱う
+                            replace_value = replace_value_str
+                    # Check if value is None after conversion (e.g. empty string was entered)
+                    if replace_value == "":
+                        replace_value = None
+
+
+            # Execute button
+            if st.button("実行", key='outlier_handle_button'):
+                try:
+                    # Perform outlier handling
+                    if treatment_method == TreatOutlierMethod.REPLACE:
+                        if replace_value is None:
+                            st.warning("置換する値を入力してください。")
+                            return
+                        
+                        eda.handle_outlier(
+                            column=outlier_target, 
+                            detection_method=detection_method, 
+                            threshold=threshold, 
+                            treatment_method=treatment_method,
+                            replace_value=replace_value
+                        )
+                    else:
+                        eda.handle_outlier(
+                            column=outlier_target, 
+                            detection_method=detection_method, 
+                            threshold=threshold, 
+                            treatment_method=treatment_method
+                        )
+                    
+                    # Success message
+                    st.success(f"カラム '{outlier_target}' の外れ値処理が完了しました。")
+                
+                except ValueError as e:
+                    st.error(f"外れ値処理エラー: {e}")
+                except Exception as e:
+                    st.error(f"予期しないエラーが発生しました: {e}")
+
+    else:
+        st.info("数値型のカラムがありません")
+
+
+def render_encoding(eda: EDADataFrame) -> None:
+    with st.expander("エンコーディング", expanded=False):
+        st.write("エンコーディングします")
+
+
+
+def render_scaling(eda: EDADataFrame) -> None:
+    """
+    Render a Streamlit UI for scaling numeric columns
+    
+    Args:
+        eda (EDADataFrame): The EDA DataFrame instance to process
+    """
+    # Only show if there are numeric columns
+    if len(eda.numeric_columns) > 0:
+        with st.expander("スケーリング処理", expanded=False):
+            
+            # Multi-select for columns to scale
+            scaling_columns = st.multiselect(
+                "スケーリングするカラムを選択",
+                eda.numeric_columns,
+                default=eda.numeric_columns,  # Default to all numeric columns
+                key='scaling_columns'
+            )
+        
+            # Scaling method selection
+            scaling_method = st.selectbox(
+                "スケーリング方法を選択",
+                [
+                    ScalingMethod.STANDARD, 
+                    ScalingMethod.MINMAX, 
+                    ScalingMethod.ROBUST, 
+                    ScalingMethod.MAXABS
+                ],
+                format_func=lambda x: {
+                    ScalingMethod.STANDARD: "標準化 (Z-スコア)",
+                    ScalingMethod.MINMAX: "最小-最大スケーリング",
+                    ScalingMethod.ROBUST: "ロバストスケーリング",
+                    ScalingMethod.MAXABS: "最大絶対値スケーリング"
+                }[x],
+                key='scaling_method'
+            )
+            
+            # Additional options based on scaling method
+            if scaling_method == ScalingMethod.MINMAX:
+                st.markdown("#### 最小-最大スケーリングオプション")
+                col_min, col_max = st.columns(2)
+                with col_min:
+                    min_range = st.number_input(
+                        "最小値", 
+                        value=0.0, 
+                        step=0.1,
+                        key='minmax_min'
+                    )
+                with col_max:
+                    max_range = st.number_input(
+                        "最大値", 
+                        value=1.0, 
+                        step=0.1,
+                        key='minmax_max'
+                    )
+            else:
+                # For other methods, use default values
+                min_range, max_range = 0, 1
+            
+            
+            # Execute button
+            if st.button("実行", key='scaling_execute_button'):
+                try:
+                    # Perform actual scaling
+                    if scaling_method == ScalingMethod.MINMAX:
+                        eda.scale_columns(
+                            columns=scaling_columns, 
+                            method=scaling_method,
+                            scale_range=(min_range, max_range)
+                        )
+                    else:
+                        eda.scale_columns(
+                            columns=scaling_columns, 
+                            method=scaling_method
+                        )
+                    
+                    # Success message
+                    st.success(f"選択されたカラムのスケーリングが完了しました: {', '.join(scaling_columns)}")
+                
+                except ValueError as e:
+                    st.error(f"スケーリング処理エラー: {e}")
+                except Exception as e:
+                    st.error(f"予期しないエラーが発生しました: {e}")
+
+    else:
+        st.info("数値型のカラムがありません")
+
+
+def render_preprosessing(eda: EDADataFrame) -> None:
+    st.markdown("### 前処理")
+    # 外れ値
+    render_outlier_handling(eda)
+    # エンコーディング
+    render_encoding(eda)
+    # スケーリング
+    render_scaling(eda)
+    # 欠損値補完
+    render_impute_handling(eda)
+    
+
 
 def render_sidebar_dataset_options(eda: EDADataFrame) -> None:
     with st.sidebar:
         st.header("データセットのオプション")
-        upload_file = st.file_uploader("CSVファイルをアップロード", type=["csv"])
-        if upload_file:
-            eda.load_from_csv(upload_file)
+        # キーを設定して状態を維持
+        upload_file = st.file_uploader("CSVファイルをアップロード", type=["csv"], key="sidebar_csv_uploader")
+
+        # ファイルがアップロードされた場合
+        if upload_file is not None:
+             # ボタンを追加して明示的にロードをトリガー
+             if st.button("アップロードしたCSVをロード", key="sidebar_load_uploaded_csv"):
+                 try:
+                      # セッションステートのedaオブジェクトに対してロード
+                      eda.load_from_csv(upload_file)
+                      st.success("CSVファイルをロードしました。")
+                      st.rerun() # ロード成功したら再実行
+                 except Exception as e:
+                      st.error(f"CSVファイルのロードに失敗しました: {e}")
+
         else:
             st.write('OR')
+            # キーを設定して状態を維持
             dataset_name = st.selectbox(
                 "データセットを選択",
-                options=eda.dataset_options(),
+                options=[""] + eda.dataset_options(), # 初期値として空文字列またはNoneを追加
                 index=0,
+                key="sidebar_dataset_select"
             )
-            # データセットの読み込み
-            eda.load_from_option(dataset_name)
+            # データセットの選択とロードボタン
+            if dataset_name and dataset_name != "": # 何か選択されているか確認
+                if st.button(f"{dataset_name} をロード", key="sidebar_load_selected_dataset"):
+                    try:
+                        # セッションステートのedaオブジェクトに対してロード
+                        eda.load_from_option(dataset_name)
+                        st.success(f"データセット '{dataset_name}' をロードしました。")
+                        st.rerun() # ロード成功したら再実行
+                    except Exception as e:
+                        st.error(f"データセットのロードに失敗しました: {e}")
+
+        st.markdown("---")
+        # eda オブジェクトを渡す
+        render_preprosessing(eda)
+
 
 
 def render_dataset_summary(eda: EDADataFrame) -> None:
     st.markdown("## データセット")
     st.markdown("### プレビュー")
     st.dataframe(eda.df, hide_index=True)
-
+    
     st.markdown("### データ形状")
     col1, col2 = st.columns(2)
     rows = len(eda.df)
@@ -57,7 +423,7 @@ def render_dataset_summary(eda: EDADataFrame) -> None:
 
     st.markdown("### 欠損値")
     st.write("- カラム数:", len(eda.missing_columns))
-    st.write("- カラム名:", f"`{', '.join(eda.missing_columns)}`" if eda.missing_columns else "なし")
+    st.write("- カラム名:", f"`{', '.join(eda.missing_columns)}`" if len(eda.missing_columns) > 0 else "なし")
     total_missing_percentage = (eda.df.isnull().sum().sum() / (rows * cols)) * 100
     st.write("- 合計欠損率:", f"{total_missing_percentage:.2f}%")
 
@@ -68,7 +434,6 @@ def render_dataset_summary(eda: EDADataFrame) -> None:
     st.markdown("### ユニーク")
     st.write("- カラム数:", len(eda.unique_columns))
     st.write("- カラム名:", f"`{', '.join(eda.unique_columns)}`" if eda.unique_columns else "なし")
-
 
     st.markdown("### 基本統計量")
     df_stats = eda.stats(include='all')
@@ -82,6 +447,7 @@ def render_dataset_summary(eda: EDADataFrame) -> None:
         - `unique` (ユニークな値の数) が多いカテゴリ変数は、取り扱いに注意が必要な場合があります。
         - `top` (最頻値) と `freq` (その頻度) から、カテゴリの偏りを確認できます。
         """)
+
 
 
 def render_histogram_section(eda: EDADataFrame) -> None:
@@ -407,7 +773,7 @@ def render_lgbm_tab(eda: EDADataFrame) -> None:
                          feature_importances = lgbm.get_feature_importances()
 
                     # ---- 評価結果表示 ----
-                    st.subheader("モデル評価結果 (テストデータ)")
+                    st.subheader("モデル評価結果")
                     st.dataframe(eval_df.style.format("{:.3f}"))
 
                     # ---- 特徴量重要度 ----
@@ -437,7 +803,16 @@ def render_lgbm_tab(eda: EDADataFrame) -> None:
         st.info("データセットがロードされていません。サイドバーからデータを選択またはアップロードしてください。LightGBMを使用するにはデータが必要です。")
 
 def render_page() -> None:
-    eda = EDADataFrame()
+    st.set_page_config(layout="centered", page_title="PyEDA")
+    st.title('PyEDA')
+    
+    # Streamlitのセッションステートを利用してEDADataFrameインスタンスを保持
+    # スクリプトの再実行時も、このインスタンスは維持される
+    if 'eda' not in st.session_state:
+        st.session_state.eda = EDADataFrame()
+
+    # edaオブジェクトを取得
+    eda: EDADataFrame = st.session_state.eda
 
     render_sidebar_dataset_options(eda)
 

@@ -19,6 +19,7 @@ class ScalingMethod(str, Enum):
     STANDARD = "standard"
     MINMAX = "minmax"
     ROBUST = "robust"
+    MAXABS = "maxabs"
 
 
 class CorrelationMethod(str, Enum):
@@ -27,15 +28,20 @@ class CorrelationMethod(str, Enum):
     KENDALL = "kendall"
 
 
-class OutlierMethod(str, Enum):
+class DetectOutlierMethod(str, Enum):
     IQR = "iqr"
     ZSCORE = "zscore"
+    PERCENTILE = "percentile"
+
+class TreatOutlierMethod(str, Enum):
+    REMOVE = "remove"
+    CLIP = "clip"
+    REPLACE = "replace"
 
 
-class FillStrategyMethod(str, Enum):
+class ImputeMethod(str, Enum):
     MEAN = 'mean'
     MODE = 'mode'
     MEDIAN = 'median'
-    ZERO = 'zero'
-    FFILL = 'ffill'
-    BFILL = 'bfill'
+    FFILL = 'ffill' # Forward Fill (直前の値で補完)
+    BFILL = 'bfill' # Backward Fill (直後の値で補完)
