@@ -9,10 +9,11 @@ class DescribeType(str, Enum):
     BOOL = 'bool'    
 
 
-class EncodingType(str, Enum):
+class EncodingMethod(str, Enum):
     ONEHOT = "onehot"
     LABEL = "label"
     ORDINAL = "ordinal"
+    BINARY = "binary"
 
 
 class ScalingMethod(str, Enum):

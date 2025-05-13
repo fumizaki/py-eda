@@ -1,6 +1,6 @@
 import streamlit as st
 from services.eda.dataframe import EDADataFrame
-from services.eda.enum import ImputeMethod, DetectOutlierMethod, TreatOutlierMethod, ScalingMethod
+from services.eda.enum import ImputeMethod, DetectOutlierMethod, TreatOutlierMethod, ScalingMethod, EncodingMethod
 from services.eda.models.lightgbm.model import LightGBMModel
 
 from components.histogram import draw_histogram, get_histogram_instruction
@@ -14,10 +14,31 @@ from components.pairplot import draw_pairplot, diagnoal_kind_options, get_pairpl
 from components.barchart import draw_barchart
 
 
-
-def render_impute_handling(eda: EDADataFrame) -> None:
+def render_delete_missing_value(eda: EDADataFrame) -> None:
     if len(eda.missing_columns) > 0:
-        with st.expander("欠損値補完", expanded=False):
+        with st.expander("欠損値(削除)", expanded=False):
+            delete_target = st.selectbox(
+                "削除対象のカラムを選択",
+                eda.missing_columns,
+                key='delete_target'
+            )
+            if st.button("実行", key='delete_button'):    
+                try:
+                    eda.delete_missing_value(
+                        column=delete_target,
+                    )
+                    st.success(f"カラム '{delete_target}' に欠損値を含む行の削除が完了しました")
+                except ValueError as e:
+                    st.error(f"欠損値削除エラー: {e}")
+                except Exception as e:
+                    st.error(f"予期しないエラーが発生しました: {e}")
+
+    else:
+        st.info("欠損値はありません")
+
+def render_impute_missing_value(eda: EDADataFrame) -> None:
+    if len(eda.missing_columns) > 0:
+        with st.expander("欠損値(補完)", expanded=False):
             impute_target = st.selectbox(
                 "補完対象のカラムを選択",
                 eda.missing_columns,
@@ -58,7 +79,20 @@ def render_impute_handling(eda: EDADataFrame) -> None:
             elif impute_option == '動的補完':
                 impute_method = st.selectbox(
                     '補完方法を選択',
-                    options=[ImputeMethod.MEAN, ImputeMethod.MEDIAN, ImputeMethod.MODE, ImputeMethod.FFILL, ImputeMethod.BFILL]
+                    options=[
+                        ImputeMethod.MEAN,
+                        ImputeMethod.MEDIAN,
+                        ImputeMethod.MODE,
+                        ImputeMethod.FFILL,
+                        ImputeMethod.BFILL
+                    ],
+                    format_func=lambda x: {
+                        ImputeMethod.MEAN: "平均値",
+                        ImputeMethod.MEDIAN: "中央値",
+                        ImputeMethod.MODE: "最頻値",
+                        ImputeMethod.FFILL: "前の値",
+                        ImputeMethod.BFILL: "後の値"
+                    }[x],
                 )
 
                 if impute_method in [ImputeMethod.MEAN, ImputeMethod.MEDIAN, ImputeMethod.MODE]:
@@ -101,7 +135,7 @@ def render_outlier_handling(eda: EDADataFrame) -> None:
 
     # Only show if there are numeric columns
     if len(eda.numeric_columns) > 0:
-        with st.expander("外れ値処理", expanded=False):
+        with st.expander("外れ値", expanded=False):
             # Column selection
             outlier_target = st.selectbox(
                 "外れ値を処理するカラムを選択",
@@ -150,7 +184,7 @@ def render_outlier_handling(eda: EDADataFrame) -> None:
                 col_lower, col_upper = st.columns(2)
                 with col_lower:
                     lower_percentile = st.number_input(
-                        "下限パーセンタイル", 
+                        "下限(%)", 
                         min_value=0.0, 
                         max_value=49.9, 
                         value=1.0,
@@ -160,7 +194,7 @@ def render_outlier_handling(eda: EDADataFrame) -> None:
                     )
                 with col_upper:
                     upper_percentile = st.number_input(
-                        "上限パーセンタイル", 
+                        "上限(%)", 
                         min_value=50.1, 
                         max_value=100.0, 
                         value=99.0,
@@ -247,8 +281,77 @@ def render_outlier_handling(eda: EDADataFrame) -> None:
 
 
 def render_encoding(eda: EDADataFrame) -> None:
-    with st.expander("エンコーディング", expanded=False):
-        st.write("エンコーディングします")
+    """
+    カテゴリカルデータのエンコーディングのためのUIを描画する
+    
+    Args:
+        eda (EDADataFrame): 処理対象のEDADataFrameインスタンス
+    """
+    # カテゴリカル列がある場合のみ表示
+    if len(eda.categorical_columns) > 0:
+        with st.expander("エンコーディング", expanded=False):
+            
+            # エンコードするカラムの複数選択
+            encoding_target = st.selectbox(
+                "エンコードするカラムを選択",
+                eda.categorical_columns,
+                key='encoding_target'
+            )
+            
+            # エンコーディング方法の選択
+            encoding_method = st.selectbox(
+                "エンコーディング方法を選択",
+                [
+                    EncodingMethod.LABEL,
+                    EncodingMethod.ONEHOT,
+                    EncodingMethod.ORDINAL,
+                    EncodingMethod.BINARY
+                ],
+                format_func=lambda x: {
+                    EncodingMethod.LABEL: "ラベルエンコーディング",
+                    EncodingMethod.ONEHOT: "OneHotエンコーディング",
+                    EncodingMethod.ORDINAL: "オーディナルエンコーディング",
+                    EncodingMethod.BINARY: "バイナリエンコーディング"
+                }[x],
+                key='encoding_method'
+            )
+            
+            # 追加オプション
+            drop_original = st.checkbox("元のカラムを削除", key='drop_original')
+            
+            
+            # OneHotエンコーディングの場合のプレフィックスオプション
+            if encoding_method == EncodingMethod.ONEHOT:
+                prefix = st.text_input(
+                    "カラム名のプレフィックス (空白の場合は元の列名が使用されます)",
+                    key='onehot_prefix'
+                )
+                if prefix == "":
+                    prefix = None
+            else:
+                prefix = None
+            
+            # 実行ボタン
+            if st.button("実行", key='encoding_execute_button'):
+                if not encoding_target:
+                    st.warning("エンコードするカラムを少なくとも1つ選択してください。")
+                else:
+                    try:
+                        with st.spinner("エンコーディング処理中..."):
+                            eda.encode_column(
+                                column=encoding_target,
+                                method=encoding_method,
+                                drop_original=drop_original,
+                                prefix=prefix
+                            )
+                            
+                        # 成功メッセージ
+                        st.success(f"選択されたカラムのエンコーディングが完了しました: {', '.join(encoding_target)}")
+                    
+                    except ValueError as e:
+                        st.error(f"エンコーディング処理エラー: {e}")
+                    except Exception as e:
+                        st.error(f"予期しないエラーが発生しました: {e}")
 
 
 
@@ -261,7 +364,7 @@ def render_scaling(eda: EDADataFrame) -> None:
     """
     # Only show if there are numeric columns
     if len(eda.numeric_columns) > 0:
-        with st.expander("スケーリング処理", expanded=False):
+        with st.expander("スケーリング", expanded=False):
             
             # Multi-select for columns to scale
             scaling_columns = st.multiselect(
@@ -342,14 +445,16 @@ def render_scaling(eda: EDADataFrame) -> None:
 
 def render_preprosessing(eda: EDADataFrame) -> None:
     st.markdown("### 前処理")
+    # 欠損値
+    render_delete_missing_value(eda)
+    render_impute_missing_value(eda)
     # 外れ値
     render_outlier_handling(eda)
     # エンコーディング
     render_encoding(eda)
     # スケーリング
     render_scaling(eda)
-    # 欠損値補完
-    render_impute_handling(eda)
+    
     
 
 
@@ -392,8 +497,8 @@ def render_sidebar_dataset_options(eda: EDADataFrame) -> None:
                         st.error(f"データセットのロードに失敗しました: {e}")
 
         st.markdown("---")
-        # eda オブジェクトを渡す
-        render_preprosessing(eda)
+        if eda.df is not None and not eda.df.empty:
+            render_preprosessing(eda)
 
 
 
@@ -752,13 +857,11 @@ def render_lgbm_tab(eda: EDADataFrame) -> None:
              lgbm_features = []
              st.warning("LightGBMの特徴量に使える数値カラムがありません。")
 
-        if len(eda.categorical_columns) > 0:
-             # デフォルトのターゲットインデックスを、可能な範囲で0に設定
-             default_target_index = 0 if len(eda.categorical_columns) > 0 else None
-             lgbm_target = st.selectbox("ターゲットカラム", eda.categorical_columns, index=default_target_index, key="lgbm_target")
-        else:
-             lgbm_target = None
-             st.warning("LightGBMのターゲットに使えるカテゴリカラムがありません。")
+
+        # デフォルトのターゲットインデックスを、可能な範囲で0に設定
+        default_target_index = 0 if len(eda.categorical_columns) > 0 else None
+        lgbm_target = st.selectbox("ターゲットカラム", eda.columns, index=default_target_index, key="lgbm_target")
+
 
 
         if lgbm_target and lgbm_features: # ターゲットと特徴量が選択されていれば実行可能
@@ -823,7 +926,7 @@ def render_page() -> None:
         with tab2:
             render_lgbm_tab(eda)
     else:
-        st.info("アプリケーションを開始するには、サイドバーからデータセットを選択するか、CSVファイルをアップロードしてください。")
+        st.info("EDAを開始するには、サイドバーからデータセットを選択するか、CSVファイルをアップロードしてください。")
 
 
 if __name__ == '__main__':

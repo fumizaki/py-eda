@@ -1,8 +1,9 @@
 from typing import IO, Optional, Union
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from services.dataset.dataset_repository import DatasetRepository
-from .enum import DescribeType, CorrelationMethod, ImputeMethod, DetectOutlierMethod, TreatOutlierMethod, ScalingMethod
+from .enum import DescribeType, CorrelationMethod, ImputeMethod, DetectOutlierMethod, TreatOutlierMethod, ScalingMethod, EncodingMethod
 
 class EDADataFrame:
     def __init__(self):
@@ -100,6 +101,15 @@ class EDADataFrame:
 
         else:
             return pd.DataFrame(columns=['変数1', '変数2', '相関'])
+
+    def delete_missing_value(self, column: str) -> None:
+        self.check_df_loaded()
+
+        if column not in self.columns:
+            raise ValueError(f"指定されたカラム '{column}' は存在しません。")
+        
+        self.df.dropna(subset=[column], inplace=True)
+        self.update_column()
 
 
     def impute_missing_value(self, column: str, value: Optional[ str | int | float ] = None, method: Optional[ImputeMethod] = None, groupby: Optional[list[str]] = None) -> None:
@@ -400,4 +410,80 @@ class EDADataFrame:
             raise ValueError(f"サポートされていないスケーリング方法: {method}")
         
         # Update column information
+        self.update_column()
+
+    def encode_column(
+        self, 
+        column: str, 
+        method: EncodingMethod, 
+        drop_original: bool = False,
+        prefix: Optional[str] = None
+    ) -> None:
+        """
+        指定されたカラムにエンコーディングを適用する
+
+        Args:
+            column (str): エンコーディングするカラム名
+            method (EncodingMethod): 適用するエンコーディング方法
+            drop_original (bool): 元のカラムを削除するかどうか
+            prefix (Optional[str]): OneHotエンコーディング時のプレフィックス（デフォルトはカラム名）
+
+        Raises:
+            ValueError: カラムが存在しない、欠損値が含まれている、または不適切なエンコーディング方法が指定された場合
+        """
+        self.check_df_loaded()
+
+        # カラムの存在確認
+        if column not in self.columns:
+            raise ValueError(f"指定されたカラム '{column}' は存在しません。")
+
+        # 欠損値確認
+        series = self.df[column].copy()
+        if series.isna().any():
+            raise ValueError(f"カラム '{column}' には欠損値が含まれています。")
+
+        # エンコーディング処理
+        if method == EncodingMethod.LABEL:
+            encoder = LabelEncoder()
+            encoded_values = encoder.fit_transform(series)
+            new_column = f"{column}_label"
+            self.df[new_column] = encoded_values
+
+        elif method == EncodingMethod.ONEHOT:
+            if prefix is None:
+                prefix = column
+            encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+            encoded_array = encoder.fit_transform(series.values.reshape(-1, 1))
+            categories = encoder.categories_[0]
+            encoded_df = pd.DataFrame(
+                encoded_array,
+                columns=[f"{prefix}_{str(cat)}" for cat in categories],
+                index=series.index
+            )
+            self.df = pd.concat([self.df, encoded_df], axis=1)
+
+        elif method == EncodingMethod.ORDINAL:
+            unique_values = series.unique()
+            value_to_ordinal = {val: i for i, val in enumerate(unique_values)}
+            new_column = f"{column}_ordinal"
+            self.df[new_column] = series.map(value_to_ordinal)
+
+        elif method == EncodingMethod.BINARY:
+            label_encoder = LabelEncoder()
+            label_encoded = label_encoder.fit_transform(series)
+            max_value = label_encoded.max()
+            bit_length = max_value.bit_length() if max_value > 0 else 1
+
+            for i in range(bit_length):
+                bit_column = f"{column}_bin_{i}"
+                self.df[bit_column] = ((label_encoded >> i) & 1).astype(int)
+
+        else:
+            raise ValueError(f"サポートされていないエンコーディング方法: {method}")
+
+        # 元のカラムを削除（オプション）
+        if drop_original:
+            self.df.drop(columns=[column], inplace=True)
+
+        # カラム情報を更新
         self.update_column()
