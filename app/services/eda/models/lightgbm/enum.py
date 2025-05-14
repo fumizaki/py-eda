@@ -6,14 +6,6 @@ class TaskType(Enum):
     MULTICLASS = "Multiclass"
     REGRESSION = "Regression"
 
-    @classmethod
-    def keys(cls) -> list[str]:
-        return [i.name for i in cls]
-
-    @classmethod
-    def values(cls) -> list[str]:
-        return [i.value for i in cls]
-
 
 class ClassificationObjective(Enum):
     """LightGBM分類タスクの目的関数"""

@@ -2,6 +2,7 @@ import streamlit as st
 from services.eda.dataframe import EDADataFrame
 from services.eda.enum import ImputeMethod, DetectOutlierMethod, TreatOutlierMethod, ScalingMethod, EncodingMethod
 from services.eda.models.lightgbm.model import LightGBMModel
+from services.eda.models.lightgbm.pipeline import LGBMPipeline
 
 from components.histogram import draw_histogram, get_histogram_instruction
 from components.qqplot import draw_qqplot, get_qqplot_instruction
@@ -841,69 +842,65 @@ def render_dataset_tab(eda: EDADataFrame) -> None:
 def render_lgbm_tab(eda: EDADataFrame) -> None:
     st.markdown("## LightGBM")
     if eda.df is not None and not eda.df.empty:
-        lgbm = LightGBMModel()
+        lgbm = LGBMPipeline()
 
         lgbm_task = st.selectbox("タスク種別", lgbm.task_options(), index=0, key="lgbm_task_type")
 
         if len(eda.numeric_columns) > 0:
-             default_lgbm_features = eda.numeric_columns
-             lgbm_features = st.multiselect(
-                     "特徴量カラム",
-                     options=eda.numeric_columns,
-                     default=default_lgbm_features,
-                     key="lgbm_features"
-                 )
+            default_lgbm_features = eda.numeric_columns
+            lgbm_features = st.multiselect(
+                "特徴量カラム",
+                options=eda.numeric_columns,
+                default=default_lgbm_features,
+                key="lgbm_features"
+            )
         else:
-             lgbm_features = []
-             st.warning("LightGBMの特徴量に使える数値カラムがありません。")
+            lgbm_features = []
+            st.warning("LightGBMの特徴量に使える数値カラムがありません。")
 
-
-        # デフォルトのターゲットインデックスを、可能な範囲で0に設定
         default_target_index = 0 if len(eda.categorical_columns) > 0 else None
         lgbm_target = st.selectbox("ターゲットカラム", eda.columns, index=default_target_index, key="lgbm_target")
 
+        if lgbm_target and lgbm_features:
+            if st.button("モデル学習 & 評価", key="lgbm_train"):
+                try:
+                    lgbm.prepare(
+                        task=lgbm_task,
+                        df=eda.df,
+                        feature_names=lgbm_features,
+                        target_name=lgbm_target,
+                        test_size=0.3
+                    )
 
-
-        if lgbm_target and lgbm_features: # ターゲットと特徴量が選択されていれば実行可能
-             if st.button("モデル学習 & 評価", key="lgbm_train"):
-                 try:
-                    lgbm.load(lgbm_task, eda.df, lgbm_features, lgbm_target, test_size=0.3) # test_size も引数で調整可能にしても良い
-
-                    # ---- 学習・評価 ----
                     with st.spinner("モデルを学習しています..."):
-                         lgbm.train(early_stopping_rounds=10) # early_stopping_rounds も引数で調整可能にしても良い
-                         eval_df = lgbm.evaluate()
-                         feature_importances = lgbm.get_feature_importances()
+                        lgbm.train(early_stopping_rounds=10)
+                        eval_df = lgbm.evaluate()
+                        feature_importances = lgbm.get_feature_importances()
 
-                    # ---- 評価結果表示 ----
                     st.subheader("モデル評価結果")
                     st.dataframe(eval_df.style.format("{:.3f}"))
 
-                    # ---- 特徴量重要度 ----
                     if feature_importances is not None and not feature_importances.empty:
-                         st.subheader("特徴量重要度 (Feature Importances)")
-
-                         draw_barchart(
+                        st.subheader("特徴量重要度 (Feature Importances)")
+                        draw_barchart(
                             df=feature_importances,
                             x_col="Importance",
                             y_col="Feature",
                             orient="v",
                             title="Feature Importances",
                         )
-
                     elif feature_importances is None:
-                         st.info("特徴量重要度を取得できませんでした。")
+                        st.info("特徴量重要度を取得できませんでした。")
 
-
-                 except Exception as e:
-                     st.error(f"LightGBMの処理中にエラーが発生しました: {e}")
+                except Exception as e:
+                    st.error(f"LightGBMの処理中にエラーが発生しました: {e}")
         elif not lgbm_features:
             st.warning("LightGBMを実行するには特徴量カラムを選択してください。")
         elif not lgbm_target:
             st.warning("LightGBMを実行するにはターゲットカラムを選択してください。")
-
     else:
         st.info("データセットがロードされていません。サイドバーからデータを選択またはアップロードしてください。LightGBMを使用するにはデータが必要です。")
+
 
 def render_page() -> None:
     st.set_page_config(layout="centered", page_title="PyEDA")
