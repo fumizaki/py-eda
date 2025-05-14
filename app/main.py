@@ -1,8 +1,9 @@
 import streamlit as st
+import pandas as pd
+import numpy as np
 from services.eda.dataframe import EDADataFrame
 from services.eda.enum import ImputeMethod, DetectOutlierMethod, TreatOutlierMethod, ScalingMethod, EncodingMethod
-from services.eda.models.lightgbm.model import LightGBMModel
-from services.eda.models.lightgbm.pipeline import LGBMPipeline
+from services.eda.models.lightgbm.pipeline import LGBMPipeline, TaskType
 
 from components.histogram import draw_histogram, get_histogram_instruction
 from components.qqplot import draw_qqplot, get_qqplot_instruction
@@ -455,6 +456,8 @@ def render_preprosessing(eda: EDADataFrame) -> None:
     render_encoding(eda)
     # スケーリング
     render_scaling(eda)
+    st.markdown("#### 履歴")
+    st.dataframe(eda.history, hide_index=True)
     
     
 
@@ -500,6 +503,7 @@ def render_sidebar_dataset_options(eda: EDADataFrame) -> None:
         st.markdown("---")
         if eda.df is not None and not eda.df.empty:
             render_preprosessing(eda)
+            
 
 
 
@@ -844,14 +848,27 @@ def render_lgbm_tab(eda: EDADataFrame) -> None:
     if eda.df is not None and not eda.df.empty:
         lgbm = LGBMPipeline()
 
-        lgbm_task = st.selectbox("タスク種別", lgbm.task_options(), index=0, key="lgbm_task_type")
+        lgbm_task = st.selectbox(
+            "タスク種別",
+            [
+                TaskType.BINARY,
+                TaskType.MULTICLASS,
+                TaskType.REGRESSION,    
+            ],
+            format_func=lambda x: {
+                TaskType.BINARY: "二値分類",
+                TaskType.MULTICLASS: "多クラス分類",
+                TaskType.REGRESSION: "回帰"
+            }[x],
+            index=0,
+            key="lgbm_task_type"
+        )
 
         if len(eda.numeric_columns) > 0:
-            default_lgbm_features = eda.numeric_columns
             lgbm_features = st.multiselect(
                 "特徴量カラム",
                 options=eda.numeric_columns,
-                default=default_lgbm_features,
+                default=eda.numeric_columns,
                 key="lgbm_features"
             )
         else:
@@ -861,31 +878,49 @@ def render_lgbm_tab(eda: EDADataFrame) -> None:
         default_target_index = 0 if len(eda.categorical_columns) > 0 else None
         lgbm_target = st.selectbox("ターゲットカラム", eda.columns, index=default_target_index, key="lgbm_target")
 
+        test_size = st.slider("テストデータの割合", 0.1, 0.5, 0.3, 0.05)
+        early_stopping = st.number_input("Early Stopping Rounds", value=10, min_value=1)
+
         if lgbm_target and lgbm_features:
             if st.button("モデル学習 & 評価", key="lgbm_train"):
                 try:
-                    lgbm.prepare(
+                    lgbm.prepare_data(
                         task=lgbm_task,
                         df=eda.df,
-                        feature_names=lgbm_features,
-                        target_name=lgbm_target,
+                        features=lgbm_features,
+                        target=lgbm_target,
                         test_size=0.3
                     )
-
+                    
                     with st.spinner("モデルを学習しています..."):
-                        lgbm.train(early_stopping_rounds=10)
+                        lgbm.fit(early_stopping_rounds=early_stopping)
                         eval_df = lgbm.evaluate()
-                        feature_importances = lgbm.get_feature_importances()
+                        feature_importances = lgbm.feature_importances()
+                        y_pred = lgbm.predict(eda.df[lgbm_features][0:lgbm.y_test.shape[0]])
+                        # クラス予測ラベルに変換
+                        if lgbm.task == TaskType.MULTICLASS:
+                            y_pred_label = np.argmax(y_pred, axis=1)
+                        else:
+                            y_pred_label = y_pred  # BINARY や REGRESSION の場合はそのまま
+
+                        # 比較用DataFrameを作成
+                        pred_df = pd.DataFrame({
+                            "予測値": y_pred_label,
+                            "実際の値": lgbm.y_test.reset_index(drop=True)
+                        })
 
                     st.subheader("モデル評価結果")
                     st.dataframe(eval_df.style.format("{:.3f}"))
+
+                    st.subheader("予測結果")
+                    st.dataframe(pred_df.style.format("{:.3f}"))
 
                     if feature_importances is not None and not feature_importances.empty:
                         st.subheader("特徴量重要度 (Feature Importances)")
                         draw_barchart(
                             df=feature_importances,
-                            x_col="Importance",
-                            y_col="Feature",
+                            x_col="importance",
+                            y_col="feature",
                             orient="v",
                             title="Feature Importances",
                         )
@@ -894,10 +929,31 @@ def render_lgbm_tab(eda: EDADataFrame) -> None:
 
                 except Exception as e:
                     st.error(f"LightGBMの処理中にエラーが発生しました: {e}")
+
+            if st.button("交差検証の実行", key="lgbm_cv"):
+                try:
+                    lgbm.prepare_data(
+                        task=lgbm_task,
+                        df=eda.df,
+                        features=lgbm_features,
+                        target=lgbm_target,
+                        test_size=test_size
+                    )
+
+                    with st.spinner("交差検証を実行中..."):
+                        cv_result = lgbm.cross_validate(cv=5)
+
+                    st.subheader("交差検証結果")
+                    st.dataframe(cv_result.style.format("{:.3f}"))
+
+                except Exception as e:
+                    st.error(f"交差検証中にエラーが発生しました: {e}")
+
         elif not lgbm_features:
             st.warning("LightGBMを実行するには特徴量カラムを選択してください。")
         elif not lgbm_target:
             st.warning("LightGBMを実行するにはターゲットカラムを選択してください。")
+
     else:
         st.info("データセットがロードされていません。サイドバーからデータを選択またはアップロードしてください。LightGBMを使用するにはデータが必要です。")
 

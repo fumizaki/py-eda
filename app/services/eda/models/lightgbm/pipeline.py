@@ -1,84 +1,16 @@
 import lightgbm as lgb
 import pandas as pd
 import numpy as np
-from enum import Enum
-from typing import Optional, Union
+from typing import Optional
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     roc_auc_score, log_loss, mean_squared_error,
     mean_absolute_error, r2_score
 )
+from .enum import TaskType, Metric
+from .parameter import get_default_params
 
-# =========================
-# Enum定義
-# =========================
-
-class TaskType(Enum):
-    BINARY = "binary"
-    MULTICLASS = "multiclass"
-    REGRESSION = "regression"
-
-
-class Objective(Enum):
-    BINARY = "binary"
-    MULTICLASS = "multiclass"
-    REGRESSION = "regression"
-
-
-class Metric(Enum):
-    # Binary
-    ACCURACY = "accuracy"
-    AUC = "auc"
-    LOGLOSS = "logloss"
-    F1 = "f1"
-    PRECISION = "precision"
-    RECALL = "recall"
-    # Multiclass
-    MULTI_LOGLOSS = "multi_logloss"
-    MULTI_ERROR = "multi_error"
-    # Regression
-    RMSE = "rmse"
-    MSE = "mse"
-    MAE = "mae"
-    R2 = "r2"
-
-# =========================
-# パラメータ取得
-# =========================
-
-def get_default_params(task_type: TaskType) -> dict:
-    common = {
-        'n_estimators': 100,
-        'learning_rate': 0.1,
-        'random_state': 42,
-        'n_jobs': -1,
-        'colsample_bytree': 0.8,
-        'subsample': 0.8,
-        'reg_alpha': 0.1,
-        'reg_lambda': 0.1,
-    }
-
-    task_specific = {
-        TaskType.BINARY: {
-            'objective': Objective.BINARY.value,
-            'metric': Metric.AUC.value
-        },
-        TaskType.MULTICLASS: {
-            'objective': Objective.MULTICLASS.value,
-            'metric': Metric.MULTI_LOGLOSS.value
-        },
-        TaskType.REGRESSION: {
-            'objective': Objective.REGRESSION.value,
-            'metric': Metric.RMSE.value
-        }
-    }
-
-    return {**common, **task_specific[task_type]}
-
-# =========================
-# LightGBMパイプライン
-# =========================
 
 class LGBMPipeline:
     def __init__(self, task: TaskType = TaskType.BINARY):
@@ -102,14 +34,25 @@ class LGBMPipeline:
         raise ValueError(f"Unsupported task: {self.task}")
 
     # データを学習用とテスト用に分割
-    def prepare_data(self, df: pd.DataFrame, features: list[str], target: str, test_size=0.2, random_state=42):
+    def prepare_data(self, task: TaskType, df: pd.DataFrame, features: list[str], target: str, test_size: Optional[float] = 0.2, random_state: Optional[float] = 42):
         if target not in df.columns:
             raise ValueError(f"Target '{target}' not in DataFrame columns.")
         self.df = df
         self.feature_names = features
         self.target_name = target
+        
+        self.task = task
+        self.params = get_default_params(self.task)
+        self.model = self._init_model()
+        
         X = df[features]
         y = df[target]
+        # 目的変数が文字列型のままならエラーを出す
+        if self.task in [TaskType.BINARY, TaskType.MULTICLASS] and y.dtype == "object":
+            raise TypeError(
+                f"Target column '{target}' is of type object (e.g., strings like 'setosa'). "
+                f"Please encode the labels as integers (e.g., using LabelEncoder) before calling prepare_data()."
+            )
         stratify = y if self.task in [TaskType.BINARY, TaskType.MULTICLASS] else None
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             X, y, test_size=test_size, random_state=random_state, stratify=stratify
@@ -157,11 +100,15 @@ class LGBMPipeline:
         # ===== MULTICLASS（多クラス分類） =====
         elif self.task == TaskType.MULTICLASS:
             proba = self.model.predict_proba(self.X_test)
-            y_pred_labels = np.argmax(proba, axis=1)
+
             metrics = {
-                "multi_logloss": log_loss(self.y_test, proba),  # 多クラスのロジスティック損失
-                "auc": roc_auc_score(self.y_test, proba, multi_class='ovr')  # クラスごとのAUCを統合
+                "multi_logloss": log_loss(self.y_test, proba)  # 通常はこれでOK
             }
+
+            try:
+                metrics["auc"] = roc_auc_score(self.y_test, proba, multi_class='ovr')
+            except ValueError as e:
+                metrics["auc"] = np.nan
 
         # ===== REGRESSION（回帰） =====
         elif self.task == TaskType.REGRESSION:
@@ -176,7 +123,7 @@ class LGBMPipeline:
         return pd.DataFrame.from_dict(metrics, orient="index", columns=["Score"])  # 結果をDataFrameに整形
 
     # 特徴量の重要度を取得
-    def feature_importance(self, top_k: Optional[int] = None) -> pd.DataFrame:
+    def feature_importances(self, top_k: Optional[int] = None) -> pd.DataFrame:
         """
         top_k: 上位k件を取得（Noneの場合は全て）
         """

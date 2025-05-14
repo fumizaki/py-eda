@@ -16,6 +16,7 @@ class EDADataFrame:
         self.missing_columns: list[str] = []
         self.unique_columns: list[str] = []
         self.duplicated_columns: list[str] = []
+        self.history: pd.DataFrame = pd.DataFrame(columns=['Action', 'Column', 'Description'])
 
 
     def check_df_loaded(self):
@@ -38,6 +39,14 @@ class EDADataFrame:
 
     def dataset_options(self) -> list[str]:
         return self.dataset_repository.options
+    
+    
+    def add_history(self, action: str, column: str, description: str) -> None:
+        self.history = pd.concat([self.history, pd.DataFrame([{
+            'Action': action,
+            'Column': column,
+            'Description': description
+        }])], ignore_index=True)
 
 
     def find_missing_columns(self) -> pd.Series:
@@ -102,6 +111,7 @@ class EDADataFrame:
         else:
             return pd.DataFrame(columns=['変数1', '変数2', '相関'])
 
+
     def delete_missing_value(self, column: str) -> None:
         self.check_df_loaded()
 
@@ -110,6 +120,12 @@ class EDADataFrame:
         
         self.df.dropna(subset=[column], inplace=True)
         self.update_column()
+        
+        self.add_history(
+            action='欠損値(削除)',
+            column=column,
+            description=f"カラム '{column}' の欠損値を削除しました。"
+        )
 
 
     def impute_missing_value(self, column: str, value: Optional[ str | int | float ] = None, method: Optional[ImputeMethod] = None, groupby: Optional[list[str]] = None) -> None:
@@ -207,6 +223,11 @@ class EDADataFrame:
 
         # 補完後にDataFrameが変更されたので、カラム情報を更新
         self.update_column()
+        self.add_history(
+            action='欠損値(補完)',
+            column=column,
+            description=f"カラム '{column}' の欠損値を '{method.value}' メソッドで補完しました。"
+        )
 
             
     def handle_outlier(
@@ -317,6 +338,11 @@ class EDADataFrame:
         
         # Update column information after handling outliers
         self.update_column()
+        self.add_history(
+            action='外れ値処理',
+            column=column,
+            description=f"カラム '{column}' の外れ値を '{detection_method.value}' メソッドで検出し、'{treatment_method.value}' メソッドで処理しました。"
+        )
         
         
         
@@ -411,6 +437,11 @@ class EDADataFrame:
         
         # Update column information
         self.update_column()
+        self.add_history(
+            action='スケーリング',
+            column=', '.join(columns),
+            description=f"カラム '{', '.join(columns)}' に '{method.value}' スケーリングを適用しました。"
+        )
 
     def encode_column(
         self, 
@@ -487,3 +518,8 @@ class EDADataFrame:
 
         # カラム情報を更新
         self.update_column()
+        self.add_history(
+            action='エンコーディング',
+            column=column,
+            description=f"カラム '{column}' に '{method.value}' エンコーディングを適用しました。"
+        )
