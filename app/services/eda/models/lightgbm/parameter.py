@@ -1,8 +1,8 @@
-from .enum import TaskType, Objective, Metric
+from .enum import LGBMTask, LGBMMetric, LGBMObjective
 
 
-def get_default_params(task_type: TaskType) -> dict:
-    common = {
+def get_lgbm_params(task: LGBMTask) -> dict:
+    static_params = {
         'n_estimators': 100,
         'learning_rate': 0.1,
         'random_state': 42,
@@ -13,20 +13,20 @@ def get_default_params(task_type: TaskType) -> dict:
         'reg_lambda': 0.1,
     }
 
-    task_specific = {
-        TaskType.BINARY: {
-            'objective': Objective.BINARY.value,
-            'metric': Metric.AUC.value
+    specific_params = {
+        LGBMTask.BINARY: {
+            'objective': LGBMObjective.BINARY.value,
+            'metric': LGBMMetric.AUC.value
         },
-        TaskType.MULTICLASS: {
-            'objective': Objective.MULTICLASS.value,
-            'metric': Metric.MULTI_LOGLOSS.value
+        LGBMTask.MULTICLASS: {
+            'objective': LGBMObjective.MULTICLASS.value,
+            'metric': LGBMMetric.MULTI_LOGLOSS.value
         },
-        TaskType.REGRESSION: {
-            'objective': Objective.REGRESSION.value,
-            'metric': Metric.RMSE.value
+        LGBMTask.REGRESSION: {
+            'objective': LGBMObjective.REGRESSION.value,
+            'metric': LGBMMetric.RMSE.value
         }
     }
 
-    return {**common, **task_specific[task_type]}
+    return {**static_params, **specific_params[task]}
 

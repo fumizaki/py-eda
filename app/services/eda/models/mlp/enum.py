@@ -1,18 +1,18 @@
 from enum import Enum
 
-class LGBMTask(Enum):
+class MLPTask(Enum):
     BINARY = "binary"
     MULTICLASS = "multiclass"
     REGRESSION = "regression"
 
 
-class LGBMObjective(Enum):
+class MLPObjective(Enum):
     BINARY = "binary"
     MULTICLASS = "multiclass"
     REGRESSION = "regression"
 
 
-class LGBMMetric(Enum):
+class MLPMetric(Enum):
     # Binary
     ACCURACY = "accuracy"
     AUC = "auc"

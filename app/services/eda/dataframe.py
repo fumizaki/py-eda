@@ -16,17 +16,22 @@ class EDADataFrame:
         self.missing_columns: list[str] = []
         self.unique_columns: list[str] = []
         self.duplicated_columns: list[str] = []
-        self.history: pd.DataFrame = pd.DataFrame(columns=['Action', 'Column', 'Description'])
+        self.history: Optional[pd.DataFrame] = None
 
 
     def check_df_loaded(self):
         if self.df is None:
             raise ValueError("DataFrame is not loaded yet.")
+        
+    
+    def init_history(self) -> pd.DataFrame:
+        self.history = pd.DataFrame(columns=['Action', 'Column', 'Description'])
 
 
     def load(self, df: pd.DataFrame) -> None:
         self.df = df
         self.update_column()
+        self.init_history()
 
 
     def load_from_csv(self, csv: IO[bytes]) -> None:
