@@ -1,2 +1,2 @@
-from .draw import draw as draw_countplot
-from .instruction import get_instruction as get_countplot_instruction
+from .drawing import draw_countplot as draw_countplot
+from .instruction import instruct_countplot as instruct_countplot

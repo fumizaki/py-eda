@@ -6,7 +6,7 @@ import seaborn as sns
 from typing import Optional
 
 
-def draw(
+def draw_histogram(
     df: pd.DataFrame,
     col: str,
     bins: Optional[int] = 20,

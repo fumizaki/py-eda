@@ -3,7 +3,7 @@ import pandas as pd
 from typing import Optional
 
 
-def draw(df: pd.DataFrame, col: str, title: Optional[str] = None):
+def draw_freqtable(df: pd.DataFrame, col: str, title: Optional[str] = None):
     """
     単一のカテゴリカル変数の度数分布表をstreamlitのdataframeとして表示します。
 

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from typing import Optional, List
+from typing import Optional
 
 
 def cmap_options() -> list[str]:
@@ -27,7 +27,7 @@ def fmt_options() -> list[str]:
     ]
 
 
-def draw(
+def draw_corrmatrix(
     df: pd.DataFrame,
     title: Optional[str] = "Correlation Heatmap",
     cmap: Optional[str] = "Blues",

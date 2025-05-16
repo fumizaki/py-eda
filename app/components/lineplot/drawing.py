@@ -6,7 +6,7 @@ import seaborn as sns
 from typing import Optional, List
 
 
-def draw(
+def draw_lineplot(
     df: pd.DataFrame,
     x_col: str,
     y_cols: List[str],

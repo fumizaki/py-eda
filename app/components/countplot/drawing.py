@@ -6,7 +6,7 @@ import seaborn as sns
 from typing import Optional, Literal
 
 
-def draw(
+def draw_countplot(
     df: pd.DataFrame,
     x_col: str,
     hue: Optional[str] = None,

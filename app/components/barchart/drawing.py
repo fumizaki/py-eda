@@ -6,7 +6,7 @@ import seaborn as sns
 from typing import Optional, Literal
 
 
-def draw(
+def draw_barchart(
     df: pd.DataFrame,
     x_col: str,
     y_col: str,

@@ -6,7 +6,7 @@ import seaborn as sns
 from typing import Optional
 
 
-def draw(
+def draw_scatterplot(
     df: pd.DataFrame,
     x_col: str,
     y_col: str,

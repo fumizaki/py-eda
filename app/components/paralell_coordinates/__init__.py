@@ -1,2 +1,2 @@
-from .draw import draw as draw_paralell_coordinates
-from .instruction import get_instruction as get_paralell_coordinates_instruction
+from .drawing import draw_paralellcoor as draw_paralellcoor
+from .instruction import instruct_paralellcoor as instruct_paralellcoor

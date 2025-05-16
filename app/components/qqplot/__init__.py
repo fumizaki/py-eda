@@ -1,2 +1,2 @@
-from .draw import draw as draw_qqplot
-from .instruction import get_instruction as get_qqplot_instruction
+from .drawing import draw_qqplot as draw_qqplot
+from .instruction import instruct_qqplot as instruct_qqplot

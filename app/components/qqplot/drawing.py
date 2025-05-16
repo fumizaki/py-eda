@@ -5,7 +5,7 @@ import seaborn as sns
 import scipy.stats as stats
 from typing import Optional
 
-def draw(
+def draw_qqplot(
     df: pd.DataFrame,
     col: str,
     dist: Optional[str] = 'norm',

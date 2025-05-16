@@ -6,7 +6,7 @@ import seaborn as sns
 from typing import Optional
 
 
-def draw(
+def draw_boxplot(
     df: pd.DataFrame,
     y_col: str,
     x_col: Optional[str] = None,

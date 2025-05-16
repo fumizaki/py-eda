@@ -1,4 +1,7 @@
-JA = """
+def instruct_corrmatrix() -> str:
+    lang = {
+        'JA': {
+            'instruction': """
         **目的:**
         - 選択された数値変数間の線形相関の強さと方向を視覚化します。
                  
@@ -9,6 +12,7 @@ JA = """
         - 0に近い値は、変数間に線形な関係がほとんどないことを示唆します。
         - 多重共線性（ multicollinearity）の特定に役立ちます（非常に相関の高い変数群がないか確認）。
         """
+        }
+    }
 
-def get_instruction() -> str:
-    return JA
+    return lang['JA']['instruction']

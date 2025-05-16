@@ -1,2 +1,2 @@
-from .draw import draw as draw_barchart
-from .instruction import get_instruction as get_barchart_instruction
+from .drawing import draw_barchart as draw_barchart
+from .instruction import instruct_barchart as instruct_barchart

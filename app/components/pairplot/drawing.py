@@ -11,7 +11,7 @@ def diagnoal_kind_options() -> list[str]:
         "hist"
     ]
 
-def draw(
+def draw_pairplot(
     df: pd.DataFrame,
     columns: list[str],
     hue: Optional[str] = None,

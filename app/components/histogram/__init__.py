@@ -1,2 +1,2 @@
-from .draw import draw as draw_histogram
-from .instruction import get_instruction as get_histogram_instruction
+from .drawing import draw_histogram as draw_histogram
+from .instruction import instruct_histogram as instruct_histogram

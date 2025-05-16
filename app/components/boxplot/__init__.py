@@ -1,2 +1,2 @@
-from .draw import draw as draw_boxplot
-from .instruction import get_instruction as get_boxplot_instruction
+from .drawing import draw_boxplot as draw_boxplot
+from .instruction import instruct_boxplot as instruct_boxplot

@@ -13,7 +13,7 @@ def inner_options() -> list[str]:
         "stick",
     ]
 
-def draw(
+def draw_violinplot(
     df: pd.DataFrame,
     y_col: str,
     x_col: Optional[str] = None,

@@ -3,24 +3,24 @@ import pandas as pd
 import numpy as np
 from services.eda.dataframe import EDADataFrame
 from services.eda.enum import ImputeMethod, DetectOutlierMethod, TreatOutlierMethod, ScalingMethod, EncodingMethod
-from services.eda.models.lightgbm.pipeline import LGBMPipeline, LGBMTask
-from services.eda.models.mlp.pipeline import MLPPipeline, MLPTask
-from services.eda.models.randomforest.pipeline import RandomForestPipeline, RFTask
-from services.eda.models.logisticregression.pipeline import LogisticRegressionPipeline, LogiRegTask
-from services.eda.models.linearregression.pipeline import LinearRegressionPipeline, LinRegTask
-from services.eda.models.svm.pipeline import SVMPipeline, SVMTask
+from services.eda.models.lightgbm import LGBMPipeline, LGBMTask
+from services.eda.models.mlp import MLPPipeline, MLPTask
+from services.eda.models.randomforest import RandomForestPipeline, RFTask
+from services.eda.models.logisticregression import LogisticRegressionPipeline, LogiRegTask
+from services.eda.models.linearregression import LinearRegressionPipeline, LinRegTask
+from services.eda.models.svm import SVMPipeline, SVMTask
 
 
-from components.histogram import draw_histogram, get_histogram_instruction
-from components.qqplot import draw_qqplot, get_qqplot_instruction
-from components.boxplot import draw_boxplot, get_boxplot_instruction
-from components.violinplot import draw_violinplot, get_violinplot_instruction
-from components.frequency_table import draw_freqtable, get_freqtable_instruction
-from components.scatterplot import draw_scatterplot, get_scatterplot_instruction
-from components.correlation_matrix import draw_correlation_matrix, cmap_options, fmt_options, get_correlation_matrix_instruction
-from components.pairplot import draw_pairplot, diagnoal_kind_options, get_pairplot_instruction
-from components.barchart import draw_barchart
-
+from components.histogram import draw_histogram, instruct_histogram
+from components.qqplot import draw_qqplot, instruct_qqplot
+from components.violinplot import draw_violinplot, instruct_violinplot
+from components.frequency_table import draw_freqtable, instruct_freqtable
+from components.scatterplot import draw_scatterplot, instruct_scatterplot
+from components.correlation_matrix import draw_corrmatrix, cmap_options, fmt_options, instruct_corrmatrix
+from components.pairplot import draw_pairplot, diagnoal_kind_options, instruct_pairplot
+from components.boxplot import draw_boxplot, instruct_boxplot
+from components.barchart import draw_barchart, instruct_barchart
+from components.linechart import draw_linechart, instruct_linechart
 
 
 
@@ -570,7 +570,7 @@ def render_dataset_summary(eda: EDADataFrame) -> None:
 
 def render_histogram_section(eda: EDADataFrame) -> None:
     st.markdown("#### ヒストグラム")
-    st.write(get_histogram_instruction())
+    st.write(instruct_histogram())
     if eda.numeric_columns:
         col = st.selectbox("カラム", eda.numeric_columns, index=0, key="histgram_col")
         with st.expander("カスタマイズ", expanded=False):
@@ -588,7 +588,7 @@ def render_histogram_section(eda: EDADataFrame) -> None:
 
 def render_qqplot_section(eda: EDADataFrame) -> None:
     st.markdown("#### QQプロット")
-    st.write(get_qqplot_instruction())
+    st.write(instruct_qqplot())
     if eda.numeric_columns:
         # カラムの選択
         col = st.selectbox("カラム", eda.numeric_columns, index=0, key="qqplot_col")
@@ -608,7 +608,7 @@ def render_qqplot_section(eda: EDADataFrame) -> None:
 
 def render_violinplot_section(eda: EDADataFrame) -> None:
     st.markdown("#### バイオリンプロット")
-    st.write(get_violinplot_instruction())
+    st.write(instruct_violinplot())
     if eda.numeric_columns:
         col = st.selectbox("カラム", eda.numeric_columns, index=0, key="violinplot_col")
         with st.expander("カスタマイズ", expanded=False):
@@ -624,7 +624,7 @@ def render_violinplot_section(eda: EDADataFrame) -> None:
 
 def render_boxplot_section(eda: EDADataFrame) -> None:
     st.markdown("#### 箱ひげ図")
-    st.write(get_boxplot_instruction())
+    st.write(instruct_boxplot())
     if eda.numeric_columns:
         col = st.selectbox("カラム", eda.numeric_columns, index=0, key="boxplot_col")
         with st.expander("カスタマイズ", expanded=False):
@@ -640,7 +640,7 @@ def render_boxplot_section(eda: EDADataFrame) -> None:
 
 def render_freqtable_section(eda: EDADataFrame) -> None:
     st.markdown("#### 度数分布表")
-    st.write(get_freqtable_instruction())
+    st.write(instruct_freqtable())
     if eda.categorical_columns:
         col = st.selectbox("カラム", eda.categorical_columns, index=0, key="freqtable_col")
         with st.expander("カスタマイズ", expanded=False):
@@ -656,7 +656,7 @@ def render_freqtable_section(eda: EDADataFrame) -> None:
 
 def render_scatterplot_section(eda: EDADataFrame) -> None:
     st.markdown("#### 散布図")
-    st.write(get_scatterplot_instruction())
+    st.write(instruct_scatterplot())
     if len(eda.numeric_columns) >= 2:
         col1, col2 = st.columns(2)
 
@@ -708,7 +708,7 @@ def render_scatterplot_section(eda: EDADataFrame) -> None:
 
 def render_corrmatrix_section(eda: EDADataFrame) -> None:
     st.markdown("#### 相関行列")
-    st.write(get_correlation_matrix_instruction())
+    st.write(instruct_corrmatrix())
 
     if len(eda.numeric_columns) >= 2:
         heatmap_cols = st.multiselect(
@@ -736,7 +736,7 @@ def render_corrmatrix_section(eda: EDADataFrame) -> None:
 
             # 描画
             correlation_df = eda.get_correlation_matrix(heatmap_cols)
-            draw_correlation_matrix(
+            draw_corrmatrix(
                 df=correlation_df,
                 cmap=cmap,
                 annot=annot,
@@ -754,7 +754,7 @@ def render_corrmatrix_section(eda: EDADataFrame) -> None:
 
 def render_pairplot_section(eda: EDADataFrame) -> None:
     st.markdown("#### ペアプロット")
-    st.write(get_pairplot_instruction())
+    st.write(instruct_pairplot())
 
     if len(eda.numeric_columns) >= 2:
         pairplot_cols = st.multiselect(
@@ -916,8 +916,9 @@ def render_lgbm_tab(eda: EDADataFrame) -> None:
 
                             # 比較用DataFrameを作成
                             pred_df = pd.DataFrame({
-                                "予測値": y_pred_label,
-                                "実際の値": lgbm.y_test.reset_index(drop=True)
+                                "Index": range(len(y_pred_label)),
+                                "Predict": y_pred_label,
+                                "Actual": lgbm.y_test.reset_index(drop=True)
                             })
 
                         st.subheader("モデル評価結果")
@@ -926,7 +927,22 @@ def render_lgbm_tab(eda: EDADataFrame) -> None:
 
                         st.subheader("予測結果")
                         st.write("テストデータに対する予測値と実測値の比較です。")
-                        st.dataframe(pred_df.style.format("{:.3f}"))
+                        st.dataframe(pred_df, hide_index=True)
+                        pred_df_melted = pred_df.melt(
+                            id_vars='Index',            # 基準となる列
+                            value_vars=['Predict', 'Actual'], # 行に展開したい列
+                            var_name='Type',            # 展開した列の名前を格納する新しい列名
+                            value_name='Value'          # 値を格納する新しい列名
+                        )
+
+                        draw_linechart(
+                            df=pred_df_melted,
+                            x_col='Index',          # x軸はインデックス
+                            y_col='Value',          # y軸は値
+                            hue='Type',             # 'Predict'と'Actual'で色分け
+                            title='Predict vs Actual over Index'
+                        )
+                        
 
                         if feature_importances is not None and not feature_importances.empty:
                             st.subheader("特徴量重要度 (Feature Importances)")
@@ -1051,10 +1067,6 @@ def render_mlp_tab(eda: EDADataFrame) -> None:
         # データ分割割合のスライダー
         test_size = st.slider("テストデータの割合", 0.1, 0.5, 0.3, 0.05, key="mlp_test_size_slider") # ユニークなキーを設定
 
-
-        
-
-
         # --- 特徴量とターゲットが選択されているか確認 ---
         if mlp_target and mlp_features:
             # --- モデル学習/評価 と 交差検証 のためのタブ ---
@@ -1106,8 +1118,9 @@ def render_mlp_tab(eda: EDADataFrame) -> None:
 
                         # 予測結果と実測値の比較DataFrameを作成
                         pred_df = pd.DataFrame({
-                            "予測値": y_pred_label_or_value,
-                            "実際の値": actual_values
+                            "Index": range(len(y_pred_label_or_value)),
+                            "Predict": y_pred_label_or_value,
+                            "Actual": actual_values
                         })
 
 
@@ -1120,10 +1133,25 @@ def render_mlp_tab(eda: EDADataFrame) -> None:
                         st.write("テストデータに対する予測値と実測値の比較です。")
                         # データが多い場合は先頭の一部のみ表示
                         if pred_df.shape[0] > 100:
-                             st.dataframe(pred_df.head(100).style.format("{:.3f}"))
+                             st.dataframe(pred_df.head(100))
                              st.write(f"... 他 {pred_df.shape[0] - 100} 件を表示していません。")
                         else:
-                            st.dataframe(pred_df.style.format("{:.3f}"))
+                            st.dataframe(pred_df, hide_index=True)
+
+                        pred_df_melted = pred_df.melt(
+                            id_vars='Index',            # 基準となる列
+                            value_vars=['Predict', 'Actual'], # 行に展開したい列
+                            var_name='Type',            # 展開した列の名前を格納する新しい列名
+                            value_name='Value'          # 値を格納する新しい列名
+                        )
+
+                        draw_linechart(
+                            df=pred_df_melted,
+                            x_col='Index',          # x軸はインデックス
+                            y_col='Value',          # y軸は値
+                            hue='Type',             # 'Predict'と'Actual'で色分け
+                            title='Predict vs Actual over Index'
+                        )
 
                         # MLPは標準では特徴量重要度を提供しないため、表示部分はありません。
 

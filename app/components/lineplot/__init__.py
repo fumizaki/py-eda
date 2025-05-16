@@ -1,2 +1,2 @@
-from .draw import draw as draw_lineplot
-from .instruction import get_instruction as get_lineplot_instruction
+from .drawing import draw_lineplot as draw_lineplot
+from .instruction import instruct_lineplot as instruct_lineplot

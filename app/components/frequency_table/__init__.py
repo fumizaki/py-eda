@@ -1,2 +1,2 @@
-from .draw import draw as draw_freqtable
-from .instruction import get_instruction as get_freqtable_instruction
+from .drawing import draw_freqtable as draw_freqtable
+from .instruction import instruct_freqtable as instruct_freqtable

@@ -7,7 +7,7 @@ from typing import Optional, List
 from pandas.plotting import parallel_coordinates
 
 
-def draw(
+def draw_paralellcoor(
     df: pd.DataFrame,
     columns: List[str],
     class_col: str,
