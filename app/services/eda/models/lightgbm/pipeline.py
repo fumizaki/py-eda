@@ -15,8 +15,8 @@ from .parameter import get_lgbm_params
 class LGBMPipeline:
     def __init__(self, task: Optional[LGBMTask] = LGBMTask.BINARY):
         self.task: LGBMTask = task  # タスクの種類
-        self.params: dict = self.get_params()
-        self.model: Union[lgb.LGBMClassifier, lgb.LGBMRegressor] = self.get_model()
+        self.params: Optional[dict] = None
+        self.model: Optional[Union[lgb.LGBMClassifier, lgb.LGBMRegressor]] = None
         self.features: Optional[list[str]] = []  # 入力特徴量の名前
         self.target: Optional[str] = None  # 目的変数のカラム名
         self.df: Optional[pd.DataFrame] = None  # 元のDataFrame
@@ -25,16 +25,12 @@ class LGBMPipeline:
         self.y_train: Optional[pd.Series] = None  # 目的変数の学習データ
         self.y_test: Optional[pd.Series] = None  # 目的変数のテストデータ
 
-    # タスクの種類
-    def load_task(self, task: LGBMTask) -> None:
-        self.task = task
-        self.params = self.get_params()
-        self.model = self.get_model()
-
 
     # パラメータ取得
     def get_params(self) -> dict:
-        return get_lgbm_params(self.task)
+        if self.df is None or self.df.empty or self.target is None:
+            raise ValueError('データセットが読み込まれていません')
+        return get_lgbm_params(self.task, self.df[self.target].nunique())
 
 
     # モデルの初期化（分類 or 回帰）
@@ -50,6 +46,7 @@ class LGBMPipeline:
     # データを学習用とテスト用に分割するメソッド
     def load_data(
         self,
+        task: LGBMTask,
         df: pd.DataFrame,
         features: list[str],
         target: str,
@@ -89,6 +86,9 @@ class LGBMPipeline:
         if target not in df.columns:
             raise ValueError(f"Target '{target}' not in DataFrame columns.")
         
+        # タスクのセット
+        self.task = task
+
         # 属性として保持
         self.df = df
         self.features = features
@@ -112,6 +112,10 @@ class LGBMPipeline:
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             X, y, test_size=test_size, random_state=random_state, stratify=stratify
         )
+
+        # モデルの設定
+        self.params = self.get_params()
+        self.model = self.get_model()
 
 
 
@@ -170,7 +174,6 @@ class LGBMPipeline:
         ValueError
             入力データに、モデルが必要とする特徴量（self.features）の一部が欠けている場合。
         """
-
         # モデルが学習時に使用した特徴量と、予測時に与えられた特徴量の整合性を確認する
         missing = set(self.features) - set(X.columns)
         if missing:
@@ -179,11 +182,13 @@ class LGBMPipeline:
         # 学習時と同じ順序・構成で特徴量を抽出
         X_processed = X[self.features]
 
-        # タスクが MULTICLASS（多クラス分類）の場合、各クラスに対する確率を返す
+        # タスクが MULTICLASS（多クラス分類）の場合
         if self.task == LGBMTask.MULTICLASS:
-            return self.model.predict_proba(X_processed)  # 各クラスの確率を返す（行×クラス数の配列）
+            proba = self.model.predict_proba(X_processed)
+            return proba
 
-        # BINARY または REGRESSION の場合は、直接予測値を返す
+        # BINARY または REGRESSION の場合は
+        print(self.task)
         return self.model.predict(X_processed)  # 1次元の予測値配列
 
 

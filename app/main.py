@@ -886,64 +886,33 @@ def render_lgbm_tab(eda: EDADataFrame) -> None:
         default_target_index = 0 if len(eda.categorical_columns) > 0 else None
         lgbm_target = st.selectbox("ターゲットカラム", eda.columns, index=default_target_index, key="lgbm_target")
 
-        test_size = st.slider("テストデータの割合", 0.1, 0.5, 0.3, 0.05)
-        early_stopping = st.number_input("Early Stopping Rounds", value=10, min_value=1)
-
         if lgbm_target and lgbm_features:
-            tab1, tab2 = st.tabs(['モデル学習 & 評価', '交差検証'])
+            tab1, tab2, tab3 = st.tabs(['評価', '予測', '交差検証'])
             with tab1:
                 st.write("LightGBMモデルを学習させ、テストデータで評価を行います。")
+                test_size = st.slider("テストデータの割合", 0.1, 0.5, 0.3, 0.05)
+                early_stopping = st.number_input("Early Stopping Rounds", value=10, min_value=1)
+
                 if st.button("実行", key="lgbm_train"):
                     try:
-                        lgbm.load_task(lgbm_task)
                         lgbm.load_data(
+                            task=lgbm_task,
                             df=eda.df,
                             features=lgbm_features,
                             target=lgbm_target,
-                            test_size=0.3
+                            test_size=test_size
                         )
                         
                         with st.spinner("モデルを学習しています..."):
                             lgbm.fit(early_stopping_rounds=early_stopping)
+                            
                             eval_df = lgbm.evaluate()
                             feature_importances = lgbm.feature_importances()
-                            y_pred = lgbm.predict(eda.df[lgbm_features][0:lgbm.y_test.shape[0]])
-                            # クラス予測ラベルに変換
-                            if lgbm.task == LGBMTask.MULTICLASS:
-                                y_pred_label = np.argmax(y_pred, axis=1)
-                            else:
-                                y_pred_label = y_pred  # BINARY や REGRESSION の場合はそのまま
-
-                            # 比較用DataFrameを作成
-                            pred_df = pd.DataFrame({
-                                "Index": range(len(y_pred_label)),
-                                "Predict": y_pred_label,
-                                "Actual": lgbm.y_test.reset_index(drop=True)
-                            })
-
+                            
                         st.subheader("モデル評価結果")
                         st.write("精度や再現率などの評価指標を確認できます。")
                         st.dataframe(eval_df.style.format("{:.3f}"))
-
-                        st.subheader("予測結果")
-                        st.write("テストデータに対する予測値と実測値の比較です。")
-                        st.dataframe(pred_df, hide_index=True)
-                        pred_df_melted = pred_df.melt(
-                            id_vars='Index',            # 基準となる列
-                            value_vars=['Predict', 'Actual'], # 行に展開したい列
-                            var_name='Type',            # 展開した列の名前を格納する新しい列名
-                            value_name='Value'          # 値を格納する新しい列名
-                        )
-
-                        draw_linechart(
-                            df=pred_df_melted,
-                            x_col='Index',          # x軸はインデックス
-                            y_col='Value',          # y軸は値
-                            hue='Type',             # 'Predict'と'Actual'で色分け
-                            title='Predict vs Actual over Index'
-                        )
                         
-
                         if feature_importances is not None and not feature_importances.empty:
                             st.subheader("特徴量重要度 (Feature Importances)")
                             draw_barchart(
@@ -956,16 +925,48 @@ def render_lgbm_tab(eda: EDADataFrame) -> None:
                         elif feature_importances is None:
                             st.info("特徴量重要度を取得できませんでした。")
 
+                        
+
                     except Exception as e:
                         st.error(f"LightGBMの処理中にエラーが発生しました: {e}")
-
             with tab2:
+                idx = st.slider("データインデックス", 1, len(eda.df), (1, len(eda.df)), 1)
+                st.dataframe(eda.df[lgbm_features][idx[0] - 1:idx[1]], hide_index=True)
+                if st.button("実行", key="lgbm_predict"):
+                    lgbm.load_data(
+                        task=lgbm_task,
+                        df=eda.df,
+                        features=lgbm_features,
+                        target=lgbm_target,
+                    )
+                    with st.spinner("モデルを学習しています..."):
+                        lgbm.fit(early_stopping_rounds=early_stopping)
+
+                        y_pred = lgbm.predict(eda.df[lgbm_features][idx[0] - 1:idx[1]])
+                        # クラス予測ラベルに変換
+                        if lgbm.task == LGBMTask.MULTICLASS:
+                            y_pred_label = y_pred.argmax(axis=1)
+                        else:
+                            y_pred_label = y_pred  # BINARY や REGRESSION の場合はそのまま
+
+                        # 比較用DataFrameを作成
+                        pred_df = pd.DataFrame({
+                            "Predict": y_pred_label,
+                            "Actual": eda.df[lgbm_target][idx[0] - 1:idx[1]],
+                            "Result": y_pred_label == eda.df[lgbm_target][idx[0] - 1:idx[1]]
+                        })
+
+                    st.subheader("予測結果")
+                    st.write("テストデータに対する予測値と実測値の比較です。")
+                    st.dataframe(pred_df, hide_index=True)
+    
+            with tab3:
                 st.write("K分割交差検証を用いて、より安定したモデル評価を行います。")
                 cv_folds = st.slider("CV分割数", 2, 10, 5, 1, key="lgbm_cv_folds_slider")
                 if st.button("実行", key="lgbm_cv"):
                     try:
-                        lgbm.load_task(lgbm_task)
                         lgbm.load_data(
+                            task=lgbm_task,
                             df=eda.df,
                             features=lgbm_features,
                             target=lgbm_target,
@@ -1101,11 +1102,10 @@ def render_mlp_tab(eda: EDADataFrame) -> None:
                         # --- 予測結果の取得と表示（テストデータに対するもの） ---
                         # テストデータに対する予測値または予測確率を取得
                         y_pred_proba_or_value = mlp.predict(mlp.X_test)
-
                         # タスク種別に応じて、比較用の予測ラベル/値に変換
                         if mlp.task == MLPTask.MULTICLASS:
                             # 多クラス分類の場合、確率の中から最も高いクラスのインデックスを取得
-                            y_pred_label_or_value = np.argmax(y_pred_proba_or_value, axis=1)
+                            y_pred_label_or_value = y_pred_proba_or_value.argmax(axis=1)
                         elif mlp.task == MLPTask.BINARY:
                              # 二値分類の場合、model.predict()で直接クラスラベルを取得
                              y_pred_label_or_value = mlp.model.predict(mlp.X_test)
